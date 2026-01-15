@@ -1,0 +1,7 @@
+# Core dependencies
+click>=8.0.0
+
+# Development dependencies
+pytest>=7.0.0
+black>=22.0.0
+pylint>=2.0.0
