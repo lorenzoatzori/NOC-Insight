@@ -4,201 +4,149 @@ CLI tool per **troubleshooting operativo in NOC (L2/L3)**.
 
 NOC-Insight nasce per **ridurre il tempo di diagnosi** su ticket reali come:
 
-* "AP down"
-* "porta switch non funziona"
-* "su che VLAN sta questo IP?"
+- "AP down"
+- "porta switch non funziona"
+- "lo switch è giù?"
+- "su che VLAN sta questo IP?"
 
-È pensato per **aiutare l’operatore**, non per sostituire il troubleshooting umano.
+È pensato per **supportare il troubleshooting umano**, non per sostituirlo.
+
+---
+
+## 🎯 Obiettivo
+
+Fornire **indicazioni operative rapide** partendo da:
+- log di rete reali
+- informazioni statiche note
+- best practice NOC codificate
+
+Il focus è **velocità + chiarezza**, non automazione cieca.
 
 ---
 
 ## 📁 Struttura del progetto
-
-```
 noc-insight/
 │
 ├── noc_insight/
-│   │
-│   ├── cli/
-│   │   └── main.py
-│   │
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── models.py
-│   │   ├── context_loader.py
-│   │   ├── ip_lookup.py
-│   │   └── ap_diagnose.py
-│   │
-│   └── data/
-│       └── (file JSON di contesto)
+│ │
+│ ├── cli/
+│ │ └── main.py # Entry point CLI
+│ │
+│ ├── commands/
+│ │ └── ap_diagnose.py # Diagnostica AP / porta
+│ │
+│ ├── core/
+│ │ ├── log_analyzer.py # Analisi passiva dei log
+│ │ ├── decision_engine.py # Ragionamento operativo NOC
+│ │
+│ └── logs/
+│ └── *.log # Log dei dispositivi (1 file = 1 device)
 │
 ├── .gitignore
 ├── requirements.txt
 └── README.md
-```
+
 
 ---
 
 ## 🧠 Concetto chiave
 
-Il tool lavora su un **contesto di rete strutturato** (file JSON) che rappresenta:
+NOC-Insight lavora in tre fasi principali:
 
-* dispositivi
-* porte
-* VLAN
-* mapping IP
+1. **Log Analyzer**
+   - legge file di log testuali
+   - estrae segnali come:
+     - link down
+     - PoE fault
+     - err-disable
+     - AP join failure
 
-Il core elabora questi dati e la CLI li espone con comandi semplici e veloci.
+2. **Decision Engine**
+   - trasforma i segnali in **ipotesi operative**
+   - codifica il ragionamento tipico di un NOC L2/L3
+
+3. **CLI**
+   - espone tutto con output chiaro e immediato
+   - nessuna GUI, nessuna dipendenza da vendor
 
 ---
 
-## 🔹 CLI (`noc_insight/cli/main.py`)
+## 🔹 CLI
 
-**Entry point dell’applicazione.**
+### `ap-diagnose`
 
-Responsabilità:
-
-* definire i comandi CLI con `click`
-* passare input e parametri al core
-* stampare l’output
-
-### Comandi attuali
-
+Diagnostica una porta switch e opzionalmente un Access Point.
 ```bash
-ip-lookup <ip>
-ap-diagnose <ap_id>
-```
+noc-insight ap-diagnose --switch SW-3F-01 --port Gi1/0/24 --ap AP-3F-023
 
 ---
 
-## 🔹 Core
+## 🔹 Output di esempio
+[PORT STATUS]
+Switch     : SW-3F-01
+Port       : Gi1/0/24
+Link state : down
+Err-disable: NO
+PoE        : fault
 
-### `models.py`
+Last port-related log event:
+%POWER_DENY: Inline power denied on Gi1/0/24
 
-Definisce i modelli dati:
+[TROUBLESHOOTING HINTS]
+- POSSIBLE CAUSE: PoE fault → verify power budget, cable quality, or AP power requirements
+- POSSIBLE CAUSE: Link down → check cable, NIC/AP status, or administrative shutdown
 
-* `Device`
-* `Port`
-* `VLAN`
-* `IPMapping`
+[AP STATUS]
+AP         : AP-3F-023
+AP status  : join_failed
+Last AP-related log event:
+%CAPWAP-3-ERRORLOG: AP AP-3F-023 failed to join controller
 
-Serve a evitare dizionari non strutturati e rendere il codice leggibile e scalabile.
-
----
-
-### `context_loader.py`
-
-Carica il contesto dai file JSON:
-
-* `devices.json`
-* `ports.json`
-* `vlans.json`
-* `ip_map.json`
-
-Converte i dati in oggetti Python pronti per il troubleshooting.
+[AP TROUBLESHOOTING HINTS]
+- POSSIBLE CAUSE: AP failed to join WLC → check connectivity, CAPWAP, or AP authorization
 
 ---
 
-### `ip_lookup.py`
 
-Funzione principale:
+📄 Log supportati
 
-```python
-lookup_ip(ip: str, ctx: ContextLoader) -> str
-```
+- syslog
+- output di show logging
+- export manuali
+- estratti da log centralizzati
 
-Cosa fa:
-
-* lookup diretto IP → VLAN / device
-* fallback per subnet VLAN
-* stampa informazioni operative:
-
-  * VLAN
-  * subnet
-  * device
-  * switch / porta / PoE (se disponibili)
-
-Pensato per rispondere subito a:
-
-> "Su che VLAN sta questo IP?"
+Formato semplice, esempio:
+Jan 14 10:32:19 SW-3F-01 %POWER_DENY: Inline power denied on Gi1/0/24
+Jan 14 10:33:01 SW-3F-01 %PM-4-ERR_DISABLE: psecure-violation error detected on Gi1/0/24
+Jan 14 10:34:11 WLC-01 %CAPWAP-3-ERRORLOG: AP AP-3F-023 failed to join controller
 
 ---
 
-### `ap_diagnose.py`
-
-Funzione:
-
-```python
-diagnose_ap(ap_id: str, ctx: ContextLoader) -> str
-```
-
-Cosa fa:
-
-* verifica esistenza AP
-* risale a switch e porta
-* controlla PoE
-* mostra VLAN associate
-* status placeholder (`Unknown`)
-
-È il primo comando **realmente orientato al lavoro NOC**.
-
----
-
-## 🔹 Data (`noc_insight/data/`)
-
-Contiene il **contesto di rete**.
-
-File attesi:
-
-* `devices.json`
-* `ports.json`
-* `vlans.json`
-* `ip_map.json`
-
-Questi file:
-
-* non contengono logica
-* rappresentano lo stato noto della rete
-* in futuro potranno essere generati automaticamente (SSH, SNMP, backup)
-
----
-
-## ⚙️ Installazione rapida
-
-```bash
+⚙️ Installazione rapida
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 pip install -r requirements.txt
-```
+
 
 ---
 
-## ▶️ Esempi d’uso
+🛣️ Roadmap
+- Estensione pattern log (BPDU Guard, STP, flapping)
+- Lookup VLAN / porta / IP
+- Raccolta dati live via SSH
+- Integrazione SNMP
+- Supporto multi-vendor
 
-```bash
-python -m noc_insight.cli.main ip-lookup 10.10.10.45
-python -m noc_insight.cli.main ap-diagnose AP-3F-023
-```
-
----
-
-## 🛣️ Roadmap
-
-* Analisi log per aggiornare lo `Status`
-* Diagnostica porte switch
-* Lookup VLAN / porta
-* Raccolta dati live via SSH
-* Integrazione SNMP
 
 ---
 
-## 🎯 Filosofia
+🎯 Filosofia
+- CLI pura
+- output testuale
+- pensato per l’uso in turno
+- modulare
+- estendibile
+- sicuro (no azioni invasive)
 
-* CLI pura
-* output testuale
-* utile in turno
-* modulare
-* estendibile
-
-NOC-Insight è pensato per **semplificare il lavoro reale**, non per fare bella figura.
+---
