@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Core dependencies
 click>=8.0.0
 
@@ -5,3 +6,7 @@ click>=8.0.0
 pytest>=7.0.0
 black>=22.0.0
 pylint>=2.0.0
+=======
+click==8.3.1
+colorama==0.4.6
+>>>>>>> 4c65594 (Add vlan lookup core logic and CLI command)
